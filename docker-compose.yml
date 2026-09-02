@@ -31,14 +31,16 @@ services:
     environment:
       DATABASE_URL: postgresql://scheduler:${POSTGRES_PASSWORD:-scheduler}@db:5432/scheduler
       UPLOAD_DIR: /data/uploads
-      HOSTNAME: 0.0.0.0
     volumes:
       - uploads:/data/uploads
     depends_on:
       migrate:
         condition: service_completed_successfully
-    expose:
-      - "3000"
+    # Bound to localhost only: the host's nginx proxies to it.
+    # Do NOT change this to "3000:3000" — Docker writes its own iptables rules
+    # and would expose the app to the internet even if ufw says otherwise.
+    ports:
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
 
   worker:
     build: .
@@ -54,23 +56,6 @@ services:
       migrate:
         condition: service_completed_successfully
 
-  caddy:
-    image: caddy:2-alpine
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    environment:
-      DOMAIN: ${DOMAIN:-localhost}
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - app
-
 volumes:
   pgdata:
   uploads:
-  caddy_data:
-  caddy_config:

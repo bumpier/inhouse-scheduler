@@ -12,38 +12,58 @@ Agency social scheduler. Drop videos into an account set → random slots inside
 
 ## Requirements
 
-- A VPS (Ubuntu 22.04/24.04, 2+ GB RAM). A domain pointed at it (A record) — Caddy gets HTTPS automatically.
+- A VPS (Ubuntu 22.04+, 2+ GB RAM) with **nginx** already installed, and a subdomain pointed at it (A record).
 - Zernio account + API key. Instagram accounts must be **Business or Creator**; Facebook must be a **Page** you admin.
 - OpenAI API key.
 
-## Deploy (Ubuntu)
+The app runs in Docker and listens on `127.0.0.1:3000` only. Your existing nginx keeps ports 80/443 and proxies to it, so anything already hosted on the box is untouched.
+
+> **Docker and ufw:** Docker writes its own iptables rules and bypasses `ufw`. Any port published as `3000:3000` would be reachable from the internet regardless of your firewall. That's why the compose file binds to `127.0.0.1:3000`. Don't change it.
+
+## Deploy (Ubuntu + existing nginx)
 
 ```bash
 # 1. Docker
 curl -fsSL https://get.docker.com | sudo sh
-sudo usermod -aG docker $USER && newgrp docker
 
 # 2. Get the code
-git clone https://github.com/YOUR-ORG/inhouse-scheduler.git
-cd inhouse-scheduler
+sudo git clone https://github.com/YOUR-ORG/inhouse-scheduler.git /opt/inhouse-scheduler
+cd /opt/inhouse-scheduler
 
 # 3. Configure
 cp .env.example .env
 nano .env        # fill in every value — see below
 
-# 4. Run
+# 4. Start (does not touch nginx or ports 80/443)
 docker compose up -d --build
-docker compose logs -f app worker   # watch first boot
+docker compose logs -f app worker      # watch first boot
+curl -I http://127.0.0.1:3000/login    # expect 200
 ```
 
-Open `https://your-domain` and sign in with `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
+Then add the nginx vhost:
+
+```bash
+# 5. Edit the server_name in the file first, then:
+sudo cp deploy/nginx-scheduler.conf /etc/nginx/sites-available/scheduler
+sudo ln -s /etc/nginx/sites-available/scheduler /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+
+# 6. HTTPS
+sudo certbot --nginx -d scheduler.yourdomain.com
+```
+
+`nginx -t` before reload is the safety net — if the new file is wrong it fails there and your existing site keeps running.
+
+The vhost sets `client_max_body_size 1G`; nginx's 1 MB default would reject every video upload.
+
+Open `https://scheduler.yourdomain.com` and sign in with `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
 
 ### `.env` values
 
 | Key | What |
 |---|---|
-| `DOMAIN` | e.g. `scheduler.yourdomain.com` (Caddy uses it for HTTPS). |
-| `APP_URL` | `https://scheduler.yourdomain.com` — must match, no trailing slash |
+| `APP_URL` | `https://scheduler.yourdomain.com` — must match the vhost, no trailing slash |
+| `APP_PORT` | `3000`; change only if that localhost port is already taken |
 | `POSTGRES_PASSWORD` | anything random |
 | `SESSION_SECRET` | `openssl rand -hex 32` |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | first login; add more users in Settings afterwards |
@@ -55,7 +75,7 @@ Open `https://your-domain` and sign in with `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
 ### Zernio webhook (recommended; otherwise status is polled every 30 s near post time)
 
 Zernio dashboard → Webhooks → add:
-- URL: `https://your-domain/api/zernio/webhook`
+- URL: `https://scheduler.yourdomain.com/api/zernio/webhook`
 - Secret: the value of `ZERNIO_WEBHOOK_SECRET`
 - Events: all `post.*`
 
@@ -69,7 +89,7 @@ Account sets → create → Connect Instagram / TikTok / Facebook (Zernio's OAut
 
 ```bash
 docker compose logs -f worker            # caption + submission log
-docker compose pull && docker compose up -d --build   # update after git pull
+git pull && docker compose up -d --build              # update
 docker compose exec db pg_dump -U scheduler scheduler > backup.sql   # backup
 ```
 
