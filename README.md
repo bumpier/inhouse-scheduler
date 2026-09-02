@@ -85,6 +85,15 @@ Account sets → create → Connect Instagram / TikTok / Facebook (Zernio's OAut
 
 **Do one real test post first** with one account before loading 10+ sets. Confirm TikTok's allowed privacy level (unaudited API access often only allows "SELF_ONLY" = private) and that Instagram accepts the video spec (vertical, ≤ 90 s for reels per Zernio docs, ≤ 300 MB).
 
+## Secrets
+
+**This repository is public.** No secrets are committed — every key lives in `.env` on the server, which is gitignored and must stay that way.
+
+- Never `git add -f .env`, and never paste a real key into `.env.example`, the README, or an issue.
+- If a key does get committed, deleting it in a later commit is **not** enough — it stays in the history and public repos are scraped within minutes. Rotate the key immediately (new Zernio API key, new OpenAI key), then clean history with `git filter-repo` or delete and recreate the repo.
+- `SESSION_SECRET` and `ZERNIO_WEBHOOK_SECRET` are generated per install (`openssl rand -hex 32`) and are never shared between environments.
+- Back up `.env` somewhere private (password manager). It is the one file on the VPS that isn't in git and can't be regenerated.
+
 ## Operating
 
 ```bash
@@ -99,14 +108,20 @@ Then copy `/root/backups` off the box (rclone to Drive/S3, or similar). Videos a
 
 Disk: videos are deleted on publish. If a set has a backlog of failed posts, their files stay until you retry or cancel them. `docker system prune` occasionally for old images.
 
-## Pushing to GitHub (first time)
+## Git
+
+Remote is already configured (`https://github.com/bumpier/inhouse-scheduler.git`, branch `main`).
 
 ```bash
-cd inhouse-scheduler
-git init && git add -A && git commit -m "Initial import"
-git branch -M main
-git remote add origin https://github.com/bumpier/inhouse-scheduler.git
-git push -u origin main
+git add -A && git commit -m "what changed"
+git push
+```
+
+To deploy the change on the VPS:
+
+```bash
+cd /opt/inhouse-scheduler
+git pull && docker compose up -d --build
 ```
 
 ## Local development
