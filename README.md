@@ -12,9 +12,12 @@ Agency social scheduler. Drop videos into an account set → random slots inside
 
 ## Requirements
 
-- A VPS (Ubuntu 22.04+, 2+ GB RAM) with **nginx** already installed, and a subdomain pointed at it (A record).
+- A VPS (Ubuntu 22.04+, 2+ GB RAM) with **nginx** already installed.
+- `scheduler.shifalabsops.com` as an **A record straight to the VPS (31.56.209.201), Cloudflare proxy OFF** (grey cloud, "DNS only").
 - Zernio account + API key. Instagram accounts must be **Business or Creator**; Facebook must be a **Page** you admin.
 - OpenAI API key.
+
+> **Why grey cloud:** Cloudflare's free and Pro plans reject request bodies over 100 MB. A proxied subdomain would 413 every large video before it ever reached nginx, and no `client_max_body_size` on your side can fix that. It also keeps `certbot --nginx` simple. Other subdomains can stay proxied — this is a per-record setting.
 
 The app runs in Docker and listens on `127.0.0.1:3000` only. Your existing nginx keeps ports 80/443 and proxies to it, so anything already hosted on the box is untouched.
 
@@ -23,6 +26,10 @@ The app runs in Docker and listens on `127.0.0.1:3000` only. Your existing nginx
 ## Deploy (Ubuntu + existing nginx)
 
 ```bash
+# 0. Confirm DNS points at this box, not Cloudflare
+#    (should print 31.56.209.201)
+dig +short scheduler.shifalabsops.com
+
 # 1. Docker
 curl -fsSL https://get.docker.com | sudo sh
 
