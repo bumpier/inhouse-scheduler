@@ -26,9 +26,9 @@ The app runs in Docker and listens on `127.0.0.1:3000` only. Your existing nginx
 ## Deploy (Ubuntu + existing nginx)
 
 ```bash
-# 0. Confirm DNS points at this box, not Cloudflare
-#    (should print 31.56.209.201)
+# 0. Pre-flight: DNS must point here (31.56.209.201), and APP_PORT must be free
 dig +short scheduler.shifalabsops.com
+sudo ss -tlnp | grep ':3001' || echo "3001 free"
 
 # 1. Docker
 curl -fsSL https://get.docker.com | sudo sh
@@ -44,7 +44,7 @@ nano .env        # fill in every value — see below
 # 4. Start (does not touch nginx or ports 80/443)
 docker compose up -d --build
 docker compose logs -f app worker      # watch first boot
-curl -I http://127.0.0.1:3000/login    # expect 200
+curl -I http://127.0.0.1:3001/login    # expect 200 (must match APP_PORT)
 ```
 
 Then add the nginx vhost:
@@ -70,7 +70,7 @@ Open `https://scheduler.shifalabsops.com` and sign in with `ADMIN_EMAIL` / `ADMI
 | Key | What |
 |---|---|
 | `APP_URL` | `https://scheduler.shifalabsops.com` — must match the vhost, no trailing slash |
-| `APP_PORT` | `3000`; change only if that localhost port is already taken |
+| `APP_PORT` | `3001` on this box — 3000 is already used by the other site. Must match `proxy_pass` in the vhost. |
 | `POSTGRES_PASSWORD` | anything random |
 | `SESSION_SECRET` | `openssl rand -hex 32` |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | first login; add more users in Settings afterwards |
@@ -91,6 +91,20 @@ Zernio dashboard → Webhooks → add:
 Account sets → create → Connect Instagram / TikTok / Facebook (Zernio's OAuth page, then you're sent back) → fill in caption guidance and a default caption → Save. Then Upload.
 
 **Do one real test post first** with one account before loading 10+ sets. Confirm TikTok's allowed privacy level (unaudited API access often only allows "SELF_ONLY" = private) and that Instagram accepts the video spec (vertical, ≤ 90 s for reels per Zernio docs, ≤ 300 MB).
+
+## Troubleshooting
+
+**`failed to bind host port 0.0.0.0:80: address already in use`** — you're running an old checkout that still contains the Caddy service. `git pull` and re-run; current versions have no Caddy and never touch 80/443.
+
+**`address already in use` on the app's port** — something else on the box owns it. Find it with `sudo ss -tlnp | grep ':3001'`, then pick a free port in `.env` (`APP_PORT`) *and* the vhost's `proxy_pass`. The two must match.
+
+**`nginx: [emerg] open() "/etc/nginx/sites-enabled/scheduler" failed`** — a symlink pointing at a file that isn't there. `sudo rm -f /etc/nginx/sites-enabled/scheduler`, then `sudo nginx -t`. Until that test passes, nginx cannot reload and a reboot would take every site on the box down with it.
+
+**Removing a service that's no longer in the compose file** — `docker compose up -d --remove-orphans` deletes containers from an older version of the file (like Caddy). Stale volumes go with `docker volume rm inhouse-scheduler_caddy_data inhouse-scheduler_caddy_config`.
+
+**Uploads fail over ~100 MB** — the subdomain is still proxied by Cloudflare. Grey-cloud it (see Requirements).
+
+**Webhook does nothing** — the URL must be exactly `/api/zernio/webhook`, and the secret in Zernio must equal `ZERNIO_WEBHOOK_SECRET`. A mismatch returns 401 and looks identical to silence. Check with `docker compose logs app | grep webhook`.
 
 ## Secrets
 
