@@ -1,0 +1,127 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
+model Setting {
+  key   String @id
+  value String
+}
+
+/// One client / brand. Maps 1:1 to a Zernio profile.
+model AccountSet {
+  id                 String          @id @default(cuid())
+  name               String          @unique
+  zernioProfileId    String?         @unique
+  timezone           String          @default("Europe/London")
+  windowStart        String          @default("09:00") // HH:mm local
+  windowEnd          String          @default("21:00") // HH:mm local
+  postsPerDay        Int             @default(2)
+  captionPrompt      String          @default("")
+  defaultCaption     String          @default("")
+  extraBannedWords   String          @default("") // newline separated
+  tiktokPrivacyLevel String          @default("PUBLIC_TO_EVERYONE")
+  active             Boolean         @default(true)
+  createdAt          DateTime        @default(now())
+  accounts           SocialAccount[]
+  videos             Video[]
+  posts              Post[]
+}
+
+/// Connected platform account, synced from Zernio.
+model SocialAccount {
+  id              String     @id @default(cuid())
+  setId           String
+  set             AccountSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  zernioAccountId String     @unique
+  platform        String // instagram | tiktok | facebook
+  username        String     @default("")
+  displayName     String     @default("")
+  isActive        Boolean    @default(true)
+  needsReconnect  Boolean    @default(false)
+  enabled         Boolean    @default(true) // our own toggle
+  updatedAt       DateTime   @updatedAt
+
+  @@index([setId])
+}
+
+enum VideoStatus {
+  uploaded
+  processing
+  ready
+  failed
+}
+
+enum CaptionSource {
+  ai
+  default
+  manual
+}
+
+model Video {
+  id              String        @id @default(cuid())
+  setId           String
+  set             AccountSet    @relation(fields: [setId], references: [id], onDelete: Cascade)
+  originalName    String
+  storedPath      String
+  mimeType        String
+  sizeBytes       Int
+  sha256          String
+  status          VideoStatus   @default(uploaded)
+  transcript      String?
+  transcriptFlags String[]      @default([]) // banned words found in audio
+  caption         String?
+  captionSource   CaptionSource?
+  captionFlags    String[]      @default([]) // banned words found in caption (should be empty)
+  error           String?
+  fileDeleted     Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  post            Post?
+
+  @@unique([setId, sha256])
+  @@index([setId, status])
+}
+
+enum PostStatus {
+  pending_review
+  approved
+  submitted
+  scheduled
+  publishing
+  published
+  partial
+  failed
+  cancelled
+}
+
+model Post {
+  id              String     @id @default(cuid())
+  videoId         String     @unique
+  video           Video      @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  setId           String
+  set             AccountSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  scheduledAt     DateTime
+  status          PostStatus @default(pending_review)
+  zernioPostId    String?    @unique
+  zernioMediaUrl  String?
+  platformResults Json?
+  error           String?
+  submittedAt     DateTime?
+  publishedAt     DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  @@index([setId, scheduledAt])
+  @@index([status, scheduledAt])
+}
