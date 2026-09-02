@@ -43,26 +43,26 @@ curl -I http://127.0.0.1:3000/login    # expect 200
 Then add the nginx vhost:
 
 ```bash
-# 5. Edit the server_name in the file first, then:
+# 5. Install the vhost
 sudo cp deploy/nginx-scheduler.conf /etc/nginx/sites-available/scheduler
 sudo ln -s /etc/nginx/sites-available/scheduler /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 
 # 6. HTTPS
-sudo certbot --nginx -d scheduler.yourdomain.com
+sudo certbot --nginx -d scheduler.shifalabsops.com
 ```
 
 `nginx -t` before reload is the safety net — if the new file is wrong it fails there and your existing site keeps running.
 
 The vhost sets `client_max_body_size 1G`; nginx's 1 MB default would reject every video upload.
 
-Open `https://scheduler.yourdomain.com` and sign in with `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
+Open `https://scheduler.shifalabsops.com` and sign in with `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
 
 ### `.env` values
 
 | Key | What |
 |---|---|
-| `APP_URL` | `https://scheduler.yourdomain.com` — must match the vhost, no trailing slash |
+| `APP_URL` | `https://scheduler.shifalabsops.com` — must match the vhost, no trailing slash |
 | `APP_PORT` | `3000`; change only if that localhost port is already taken |
 | `POSTGRES_PASSWORD` | anything random |
 | `SESSION_SECRET` | `openssl rand -hex 32` |
@@ -75,7 +75,7 @@ Open `https://scheduler.yourdomain.com` and sign in with `ADMIN_EMAIL` / `ADMIN_
 ### Zernio webhook (recommended; otherwise status is polled every 30 s near post time)
 
 Zernio dashboard → Webhooks → add:
-- URL: `https://scheduler.yourdomain.com/api/zernio/webhook`
+- URL: `https://scheduler.shifalabsops.com/api/zernio/webhook` (exact path — `/api/` alone will 404)
 - Secret: the value of `ZERNIO_WEBHOOK_SECRET`
 - Events: all `post.*`
 
