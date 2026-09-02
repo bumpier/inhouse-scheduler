@@ -26,9 +26,15 @@ The app runs in Docker and listens on `127.0.0.1:3000` only. Your existing nginx
 ## Deploy (Ubuntu + existing nginx)
 
 ```bash
-# 0. Pre-flight: DNS must point here (31.56.209.201), and APP_PORT must be free
+# 0. Pre-flight
+#    DNS must resolve to this box (31.56.209.201), NOT Cloudflare
 dig +short scheduler.shifalabsops.com
-sudo ss -tlnp | grep ':3001' || echo "3001 free"
+
+#    Find a genuinely free port. This box already runs other services on
+#    3000 and 3001 — never assume a port is free, always check.
+for p in 3002 3010 3020 4010 4020 8090; do
+  ss -tln | grep -q ":$p " && echo "$p TAKEN" || echo "$p free"
+done
 
 # 1. Docker
 curl -fsSL https://get.docker.com | sudo sh
@@ -44,7 +50,11 @@ nano .env        # fill in every value — see below
 # 4. Start (does not touch nginx or ports 80/443)
 docker compose up -d --build
 docker compose logs -f app worker      # watch first boot
-curl -I http://127.0.0.1:3001/login    # expect 200 (must match APP_PORT)
+curl -I http://127.0.0.1:$APP_PORT/login   # expect 200
+
+#    Sanity-check you reached THIS app and not another service on that port:
+#      - no "X-Powered-By: Express" header  (that's a different app)
+#      - no "Content-Security-Policy" header (this app sets none)
 ```
 
 Then add the nginx vhost:
@@ -70,7 +80,7 @@ Open `https://scheduler.shifalabsops.com` and sign in with `ADMIN_EMAIL` / `ADMI
 | Key | What |
 |---|---|
 | `APP_URL` | `https://scheduler.shifalabsops.com` — must match the vhost, no trailing slash |
-| `APP_PORT` | `3001` on this box — 3000 is already used by the other site. Must match `proxy_pass` in the vhost. |
+| `APP_PORT` | A port you have **verified is free** (step 0). 3000 and 3001 are already used on this box. Must match `proxy_pass` in the vhost. |
 | `POSTGRES_PASSWORD` | anything random |
 | `SESSION_SECRET` | `openssl rand -hex 32` |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | first login; add more users in Settings afterwards |
@@ -96,7 +106,9 @@ Account sets → create → Connect Instagram / TikTok / Facebook (Zernio's OAut
 
 **`failed to bind host port 0.0.0.0:80: address already in use`** — you're running an old checkout that still contains the Caddy service. `git pull` and re-run; current versions have no Caddy and never touch 80/443.
 
-**`address already in use` on the app's port** — something else on the box owns it. Find it with `sudo ss -tlnp | grep ':3001'`, then pick a free port in `.env` (`APP_PORT`) *and* the vhost's `proxy_pass`. The two must match.
+**`address already in use` on the app's port** — something else owns it. Find what with `sudo ss -tlnp | grep ':<port>'`, then pick a verified-free port in `.env` (`APP_PORT`) *and* the vhost's `proxy_pass`. The two must match.
+
+**The vhost serves someone else's app** — `proxy_pass` is pointing at a port owned by another service, so nginx has just published that service to the internet. This is worse than a broken deploy: an internal-only service becomes publicly reachable. Disable the vhost immediately (`sudo rm /etc/nginx/sites-enabled/scheduler && sudo nginx -t && sudo systemctl reload nginx`), fix the port, then re-enable. Verify with the header check in step 4 before putting the vhost back.
 
 **`nginx: [emerg] open() "/etc/nginx/sites-enabled/scheduler" failed`** — a symlink pointing at a file that isn't there. `sudo rm -f /etc/nginx/sites-enabled/scheduler`, then `sudo nginx -t`. Until that test passes, nginx cannot reload and a reboot would take every site on the box down with it.
 
