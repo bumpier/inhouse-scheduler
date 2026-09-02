@@ -27,7 +27,7 @@ The app runs in Docker and listens on `127.0.0.1:3000` only. Your existing nginx
 curl -fsSL https://get.docker.com | sudo sh
 
 # 2. Get the code
-sudo git clone https://github.com/YOUR-ORG/inhouse-scheduler.git /opt/inhouse-scheduler
+sudo git clone https://github.com/bumpier/inhouse-scheduler.git /opt/inhouse-scheduler
 cd /opt/inhouse-scheduler
 
 # 3. Configure
@@ -105,7 +105,7 @@ Disk: videos are deleted on publish. If a set has a backlog of failed posts, the
 cd inhouse-scheduler
 git init && git add -A && git commit -m "Initial import"
 git branch -M main
-git remote add origin https://github.com/YOUR-ORG/inhouse-scheduler.git
+git remote add origin https://github.com/bumpier/inhouse-scheduler.git
 git push -u origin main
 ```
 
